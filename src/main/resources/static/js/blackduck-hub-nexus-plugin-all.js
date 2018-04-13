@@ -165,9 +165,9 @@ Ext.extend(Sonatype.repoServer.HubTab, Ext.Panel, {
 							this.find('name', 'scanTime')[0].setRawValue(dateTime);
 							var scanStatus = infoResp.scanStatus;
 							var statusString = "Failed";
-							if (scanStatus == 1) {
+							if (scanStatus == '1') {
 								statusString = "Success";
-							}
+							} 
 							this.find('name', 'scanResult')[0].setRawValue(statusString);
 
 							artifactContainer.showTab(this);

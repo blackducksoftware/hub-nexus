@@ -21,24 +21,21 @@
  * 	specific language governing permissions and limitations
  * 	under the License.
  */
-package com.blackducksoftware.integration.hub.nexus.event.scan
+package com.blackducksoftware.integration.hub.nexus.repository.task.filter;
 
-import org.junit.Assert
-import org.junit.Test
+import org.sonatype.nexus.proxy.item.StorageItem;
+import org.sonatype.nexus.proxy.walker.WalkerContext;
 
-import com.blackducksoftware.integration.hub.nexus.event.AbstractHandlerTest
-import com.blackducksoftware.integration.hub.nexus.event.HubScanEvent
+import com.blackducksoftware.integration.hub.nexus.util.ItemAttributesHelper;
 
-public class ProcessedEventTestIT extends AbstractHandlerTest {
+public class PolicyRepositoryWalkerFilter extends RepositoryWalkerFilter {
 
-    @Override
-    public String getZipFilePath() {
-        return "src/test/resources/repo1/aa-1.2.3.zip"
+    public PolicyRepositoryWalkerFilter(final ItemAttributesHelper itemAttributesHelper) {
+        super(itemAttributesHelper);
     }
 
-    @Test
-    public void testProcessedEvent() {
-        final HubScanEvent event = new HubScanEvent(getRepository(), getItem(), getTaskParameters(), getResourceStoreRequest(), getProjectRequest())
-        Assert.assertFalse(getEventBus().hasEvents())
+    @Override
+    public boolean shouldProcess(final WalkerContext context, final StorageItem item) {
+        return super.shouldProcess(context, item) && ItemAttributesHelper.SCAN_STATUS_SUCCESS == itemAttributesHelper.getScanResult(item);
     }
 }

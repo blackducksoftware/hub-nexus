@@ -28,7 +28,8 @@ import org.junit.Test
 import org.sonatype.nexus.events.Event
 
 import com.blackducksoftware.integration.hub.nexus.event.HubPolicyCheckEvent
-import com.blackducksoftware.integration.hub.nexus.event.HubPolicyCheckEventHandler
+import com.blackducksoftware.integration.hub.nexus.event.TaskEventManager
+import com.blackducksoftware.integration.hub.nexus.event.handler.HubPolicyCheckEventHandler
 import com.blackducksoftware.integration.hub.nexus.util.ItemAttributesHelper
 
 public class NotInViolationPolicyCheckEventTestIT extends AbstractPolicyCheckTest {
@@ -40,7 +41,8 @@ public class NotInViolationPolicyCheckEventTestIT extends AbstractPolicyCheckTes
 
     @Test
     public void testHandleEvent() throws Exception {
-        final HubPolicyCheckEventHandler policyEventHandler = new HubPolicyCheckEventHandler(getAttributesHandler())
+        TaskEventManager taskEventManager = new TaskEventManager(eventBus)
+        final HubPolicyCheckEventHandler policyEventHandler = new HubPolicyCheckEventHandler(getAttributesHandler(), taskEventManager)
 
         for (final Event<?> event : getEventBus().getEvents()) {
             if (event instanceof HubPolicyCheckEvent) {

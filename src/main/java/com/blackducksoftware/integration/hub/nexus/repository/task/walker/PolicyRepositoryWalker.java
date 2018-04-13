@@ -21,61 +21,57 @@
  * 	specific language governing permissions and limitations
  * 	under the License.
  */
-package com.blackducksoftware.integration.hub.nexus.repository.task;
+package com.blackducksoftware.integration.hub.nexus.repository.task.walker;
 
-import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
-import org.sonatype.nexus.proxy.item.StorageCollectionItem;
 import org.sonatype.nexus.proxy.item.StorageItem;
-import org.sonatype.nexus.proxy.item.uid.IsHiddenAttribute;
 import org.sonatype.nexus.proxy.walker.AbstractWalkerProcessor;
 import org.sonatype.nexus.proxy.walker.WalkerContext;
 import org.sonatype.sisu.goodies.common.Loggers;
-import org.sonatype.sisu.goodies.eventbus.EventBus;
 
 import com.blackducksoftware.integration.exception.IntegrationException;
 import com.blackducksoftware.integration.hub.model.view.ProjectVersionView;
 import com.blackducksoftware.integration.hub.nexus.application.HubServiceHelper;
 import com.blackducksoftware.integration.hub.nexus.event.HubPolicyCheckEvent;
+import com.blackducksoftware.integration.hub.nexus.event.TaskEventManager;
+import com.blackducksoftware.integration.hub.nexus.exception.MaxWalkedItemsException;
 import com.blackducksoftware.integration.hub.nexus.util.ItemAttributesHelper;
+import com.blackducksoftware.integration.hub.nexus.util.ScanAttributesHelper;
 
 public class PolicyRepositoryWalker extends AbstractWalkerProcessor {
+    private static final int MAX_POLICY_CHECKS = 15;
     private final Logger logger = Loggers.getLogger(getClass());
-    private final EventBus eventBus;
     private final ItemAttributesHelper itemAttributesHelper;
-    private final Map<String, String> taskParameters;
+    private final ScanAttributesHelper scanAttributesHelper;
     private final HubServiceHelper hubServiceHelper;
+    private final TaskEventManager taskEventManager;
 
-    public PolicyRepositoryWalker(final EventBus eventBus, final ItemAttributesHelper itemAttributesHelper, final Map<String, String> taskParameters, final HubServiceHelper hubServiceHelper) {
+    public PolicyRepositoryWalker(final ItemAttributesHelper itemAttributesHelper, final ScanAttributesHelper scanAttributesHelper, final HubServiceHelper hubServiceHelper, final TaskEventManager taskEventManager) {
         this.itemAttributesHelper = itemAttributesHelper;
-        this.eventBus = eventBus;
-        this.taskParameters = taskParameters;
+        this.scanAttributesHelper = scanAttributesHelper;
         this.hubServiceHelper = hubServiceHelper;
+        this.taskEventManager = taskEventManager;
     }
 
     @Override
     public void processItem(final WalkerContext context, final StorageItem item) throws Exception {
         try {
-            if (item instanceof StorageCollectionItem) {
-                return; // directory found
-            }
-            if (item.getRepositoryItemUid().getBooleanAttributeValue(IsHiddenAttribute.class)) {
-                return;
+            logger.info("Begin Policy check for item {}", item);
+            final ProjectVersionView projectVersionView = getProjectVersion(item);
+            final HubPolicyCheckEvent event = new HubPolicyCheckEvent(item.getRepositoryItemUid().getRepository(), item, scanAttributesHelper.getScanAttributes(), context.getResourceStoreRequest(), projectVersionView);
+
+            int currentAttempts = 0;
+            while (!taskEventManager.processEvent(event) && (currentAttempts < MAX_POLICY_CHECKS)) {
+                logger.warn("Attempting to push to event bus again...");
+                currentAttempts++;
+                TimeUnit.SECONDS.sleep(1);
             }
 
-            if (StringUtils.isNotBlank(item.getRemoteUrl())) {
-                logger.info("Item came from a proxied repository, skipping: {}", item);
-                return;
-            }
-
-            final long scanResult = itemAttributesHelper.getScanResult(item);
-            if (scanResult == ItemAttributesHelper.SCAN_STATUS_SUCCESS) {
-                logger.info("Begin Policy check for item {}", item);
-                final ProjectVersionView projectVersionView = getProjectVersion(item);
-                final HubPolicyCheckEvent event = new HubPolicyCheckEvent(item.getRepositoryItemUid().getRepository(), item, taskParameters, context.getResourceStoreRequest(), projectVersionView);
-                eventBus.post(event);
+            if (currentAttempts == MAX_POLICY_CHECKS) {
+                logger.warn("Tried processing event too many times, exiting task.");
+                context.stop(new MaxWalkedItemsException(MAX_POLICY_CHECKS));
             }
         } catch (final Exception ex) {
             logger.error("Error occurred in walker processor for repository: ", ex);

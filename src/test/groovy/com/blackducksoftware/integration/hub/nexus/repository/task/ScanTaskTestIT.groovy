@@ -29,20 +29,23 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.Mockito
 import org.sonatype.nexus.AbstractMavenRepoContentTests
+import org.sonatype.nexus.configuration.application.ApplicationConfiguration
 import org.sonatype.nexus.proxy.attributes.DefaultAttributesHandler
 import org.sonatype.nexus.proxy.walker.Walker
 
-import com.blackducksoftware.integration.hub.nexus.event.ScanEventManager
-import com.blackducksoftware.integration.hub.nexus.event.scan.ScanEventManagerTest
 import com.blackducksoftware.integration.hub.nexus.test.RestConnectionTestHelper
 import com.blackducksoftware.integration.hub.nexus.test.TestingPropertyKey
 
+import groovy.transform.TypeChecked
+
+@TypeChecked
 public class ScanTaskTestIT extends AbstractMavenRepoContentTests {
     private Walker walker
+    private TaskWalker taskWalker
     private DefaultAttributesHandler defaultAttributesHandler
-    private ScanEventManager scanEventManager
     private RestConnectionTestHelper restConnection
     private Map<String, String> taskParameters
+    private ApplicationConfiguration applicationConfiguration
 
     @Override
     public void setUp() throws Exception {
@@ -54,16 +57,16 @@ public class ScanTaskTestIT extends AbstractMavenRepoContentTests {
     @Before
     public void init() throws Exception {
         walker = lookup(Walker.class)
+        taskWalker = new TaskWalker(walker)
         defaultAttributesHandler = lookup(DefaultAttributesHandler.class)
-        scanEventManager = lookup(ScanEventManager.class)
+        applicationConfiguration = lookup(ApplicationConfiguration.class)
         taskParameters = generateParams()
-        taskParameters.put(ScanEventManager.PARAMETER_KEY_TASK_NAME, ScanEventManagerTest.TEST_TASK_NAME)
     }
 
     @Test
     public void doRunTest() throws Exception {
 
-        final ScanTask scanTask = new ScanTask(walker, defaultAttributesHandler, scanEventManager)
+        final ScanTask scanTask = new ScanTask(applicationConfiguration, taskWalker, defaultAttributesHandler)
         final ScanTask spyScanTask = Mockito.spy(scanTask)
 
         Mockito.when(spyScanTask.getParameters()).thenReturn(taskParameters)
