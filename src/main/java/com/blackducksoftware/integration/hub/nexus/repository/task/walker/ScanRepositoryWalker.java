@@ -44,6 +44,7 @@ import com.blackducksoftware.integration.hub.nexus.util.ItemAttributesHelper;
 import com.blackducksoftware.integration.hub.nexus.util.ParallelEventProcessor;
 import com.synopsys.integration.blackduck.api.generated.enumeration.ProjectVersionDistributionType;
 import com.synopsys.integration.blackduck.api.generated.enumeration.ProjectVersionPhaseType;
+import com.synopsys.integration.blackduck.api.generated.view.ProjectVersionView;
 import com.synopsys.integration.blackduck.api.generated.view.ProjectView;
 import com.synopsys.integration.blackduck.api.generated.view.TagView;
 import com.synopsys.integration.blackduck.service.BlackDuckService;
@@ -114,12 +115,20 @@ public class ScanRepositoryWalker extends RepositoryWalkerProcessor<HubScanEvent
 
     public ProjectVersionWrapper getOrCreateProjectVersion(final BlackDuckService blackDuckService, final ProjectService projectService, final String name, final String versionName, final String distribution, final String phase)
         throws IntegrationException {
-        final Optional<ProjectVersionWrapper> projectVersionWrapperOptional = projectService.getProjectVersion(name, versionName);
         final ProjectVersionWrapper projectVersionWrapper;
-        if (projectVersionWrapperOptional.isPresent()) {
-            projectVersionWrapper = projectVersionWrapperOptional.get();
+        final Optional<ProjectView> projectOptional = projectService.getProjectByName(name);
+        if (projectOptional.isPresent()) {
+            final ProjectView projectView = projectOptional.get();
+            final Optional<ProjectVersionView> projectVersionOptional = projectService.getProjectVersion(projectView, versionName);
+            if (projectVersionOptional.isPresent()) {
+                final ProjectVersionView projectVersionView = projectVersionOptional.get();
+                projectVersionWrapper = new ProjectVersionWrapper(projectView, projectVersionView);
+            } else {
+                final ProjectVersionView projectVersionView = createProjectVersion(projectService, projectView, versionName, distribution, phase);
+                projectVersionWrapper = new ProjectVersionWrapper(projectView, projectVersionView);
+            }
         } else {
-            projectVersionWrapper = createProjectVersion(projectService, name, versionName, distribution, phase);
+            projectVersionWrapper = createProject(projectService, name, versionName, distribution, phase);
         }
 
         final TagService tagService = new TagService(blackDuckService, new Slf4jIntLogger(logger));
@@ -135,15 +144,26 @@ public class ScanRepositoryWalker extends RepositoryWalkerProcessor<HubScanEvent
         return projectVersionWrapper;
     }
 
-    private ProjectVersionWrapper createProjectVersion(final ProjectService projectService, final String name, final String versionName, final String distribution, final String phase) throws IntegrationException {
-        logger.debug("Creating project in Black Duck : {}", name);
+    private ProjectVersionWrapper createProject(final ProjectService projectService, final String name, final String versionName, final String distribution, final String phase) throws IntegrationException {
+        logger.debug("Creating project in Black Duck : {}, version: {}", name, versionName);
         final ProjectSyncModel projectSyncModel = new ProjectSyncModel();
         projectSyncModel.setName(name);
         projectSyncModel.setVersionName(versionName);
         projectSyncModel.setProjectLevelAdjustments(true);
         projectSyncModel.setPhase(ProjectVersionPhaseType.valueOf(phase.toUpperCase()));
         projectSyncModel.setDistribution(ProjectVersionDistributionType.valueOf(distribution.toUpperCase()));
+        projectSyncModel.setProjectLevelAdjustments(true);
         return projectService.createProject(projectSyncModel.createProjectRequest());
+    }
+
+    private ProjectVersionView createProjectVersion(final ProjectService projectService, final ProjectView projectView, final String versionName, final String distribution, final String phase) throws IntegrationException {
+        logger.debug("Creating version in Black Duck : {}, for Project: {}", versionName, projectView.getName());
+        final ProjectSyncModel projectSyncModel = new ProjectSyncModel();
+        projectSyncModel.setVersionName(versionName);
+        projectSyncModel.setProjectLevelAdjustments(true);
+        projectSyncModel.setPhase(ProjectVersionPhaseType.valueOf(phase.toUpperCase()));
+        projectSyncModel.setDistribution(ProjectVersionDistributionType.valueOf(distribution.toUpperCase()));
+        return projectService.createProjectVersion(projectView, projectSyncModel.createProjectVersionRequest());
     }
 
 }
